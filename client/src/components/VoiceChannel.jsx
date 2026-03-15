@@ -1,56 +1,79 @@
 import { useEffect, useRef, useState } from 'react';
-import Peer from 'peerjs';
 import { useSocket } from '../context/SocketContext';
 
 export default function VoiceChannel({ roomId, userId }) {
   const socket = useSocket();
-  const peerRef = useRef(null);
   const [isMuted, setIsMuted] = useState(false);
-  const [connected, setConnected] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [peers, setPeers] = useState([]);
   const streamRef = useRef(null);
+  const peerRef = useRef(null);
 
   useEffect(() => {
-    const peer = new Peer(userId);
-    peerRef.current = peer;
+    let peer;
+    import('peerjs').then(({ default: Peer }) => {
+      peer = new Peer(userId + '_' + roomId);
+      peerRef.current = peer;
 
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-      streamRef.current = stream;
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        streamRef.current = stream;
+        setIsConnected(true);
 
-      // When someone joins, call them
-      socket.on('user-joined', ({ user }) => {
-        const call = peer.call(user.id, stream);
-        call.on('stream', remoteStream => playAudio(remoteStream));
-        setConnected(true);
-      });
+        peer.on('call', call => {
+          call.answer(stream);
+          call.on('stream', remoteStream => playAudio(remoteStream));
+          setPeers(prev => [...prev, call.peer]);
+        });
 
-      // Answer incoming calls
-      peer.on('call', call => {
-        call.answer(stream);
-        call.on('stream', remoteStream => playAudio(remoteStream));
-        setConnected(true);
-      });
+        socket.on('user-joined', ({ user }) => {
+          const call = peer.call(user.id + '_' + roomId, stream);
+          if (call) {
+            call.on('stream', remoteStream => playAudio(remoteStream));
+            setPeers(prev => [...prev, user.username]);
+          }
+        });
+      }).catch(() => setIsConnected(false));
     });
 
-    return () => { peer.destroy(); streamRef.current?.getTracks().forEach(t => t.stop()); };
+    return () => {
+      streamRef.current?.getTracks().forEach(t => t.stop());
+      peer?.destroy();
+    };
   }, []);
 
   const playAudio = (stream) => {
-    const audio = new Audio();
+    const audio = document.createElement('audio');
     audio.srcObject = stream;
-    audio.play();
+    audio.autoplay = true;
+    document.body.appendChild(audio);
   };
 
   const toggleMute = () => {
-    streamRef.current.getAudioTracks().forEach(t => t.enabled = isMuted);
-    setIsMuted(!isMuted);
+    if (streamRef.current) {
+      streamRef.current.getAudioTracks().forEach(t => t.enabled = isMuted);
+      setIsMuted(!isMuted);
+    }
   };
 
   return (
-    <div style={{ padding: '8px', background: '#1a1a2e', borderRadius: 8, color: '#fff', fontSize: 13 }}>
-      <span>🎙 Voice {connected ? '● Live' : '○ Waiting'}</span>
-      <button onClick={toggleMute} style={{ marginLeft: 12, fontSize: 12 }}>
-        {isMuted ? '🔇 Unmute' : '🔊 Mute'}
+    <div style={s.voice}>
+      <div style={s.status}>
+        <span style={{ ...s.dot, background: isConnected ? '#238636' : '#8b949e' }} />
+        <span style={s.label}>{isConnected ? `Voice Live` : 'Connecting...'}</span>
+        {peers.length > 0 && <span style={s.count}>{peers.length} connected</span>}
+      </div>
+      <button style={{ ...s.muteBtn, background: isMuted ? '#da3633' : '#21262d' }} onClick={toggleMute}>
+        {isMuted ? '🔇' : '🎙'}
       </button>
     </div>
   );
 }
+
+const s = {
+  voice:   { display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', background: '#21262d', borderRadius: 8, border: '1px solid #30363d' },
+  status:  { display: 'flex', alignItems: 'center', gap: 6 },
+  dot:     { width: 8, height: 8, borderRadius: '50%', display: 'inline-block' },
+  label:   { fontSize: 12, color: '#e6edf3' },
+  count:   { fontSize: 11, color: '#8b949e' },
+  muteBtn: { border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 16, cursor: 'pointer' }
+};

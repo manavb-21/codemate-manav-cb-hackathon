@@ -1,80 +1,155 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useSocket } from '../context/SocketContext';
 import CodeEditor from '../components/CodeEditor';
-import VoiceChannel from '../components/VoiceChannel';
+import Terminal from '../components/Terminal';
 import Chat from '../components/Chat';
+import VoiceChannel from '../components/VoiceChannel';
 import axios from 'axios';
 
 const LANGUAGES = ['python', 'javascript', 'cpp', 'java'];
 
 export default function Room() {
   const { roomId } = useParams();
+  const navigate = useNavigate();
   const socket = useSocket();
   const user = JSON.parse(localStorage.getItem('user'));
-  const [code, setCode] = useState('# Start here\n');
+  const token = localStorage.getItem('token');
+
+  const [code, setCode] = useState('# Start coding here\n');
   const [language, setLanguage] = useState('python');
   const [output, setOutput] = useState('');
   const [isRunning, setIsRunning] = useState(false);
   const [votes, setVotes] = useState(new Set());
-  const [users, setUsers] = useState([]);
+  const [userCount, setUserCount] = useState(1);
+  const [handRaised, setHandRaised] = useState(false);
 
   useEffect(() => {
+    if (!user) { navigate('/login'); return; }
+
     socket.emit('join-room', { roomId, user });
-    socket.on('user-joined', ({ user: u }) => setUsers(prev => [...prev, u]));
+
+    socket.on('load-room', ({ code: c, language: l }) => {
+      setCode(c);
+      setLanguage(l);
+    });
     socket.on('language-update', ({ language: l }) => setLanguage(l));
+    socket.on('user-joined', () => setUserCount(p => p + 1));
+    socket.on('user-left',   () => setUserCount(p => Math.max(1, p - 1)));
     socket.on('run-vote-update', ({ userId }) => setVotes(prev => new Set([...prev, userId])));
-    socket.on('execution-started', runCode);
+    socket.on('execution-started', () => executeCode());
+
     return () => socket.removeAllListeners();
   }, [roomId]);
 
-  const runCode = async () => {
+  const executeCode = async () => {
     setIsRunning(true);
     setOutput('Running...');
     try {
       const { data } = await axios.post('http://localhost:5000/api/execute', { code, language });
-      setOutput(data.stdout || data.stderr || 'No output');
-    } catch (e) { setOutput('Error: ' + e.message); }
+      const result = data.stdout || data.stderr || data.compile_output || 'No output';
+      setOutput(`[${data.status}]\n${result}`);
+    } catch (e) {
+      setOutput('Error: ' + e.message);
+    }
     setIsRunning(false);
+    setVotes(new Set());
   };
 
   const handleVoteRun = () => {
+    const newVotes = new Set([...votes, user.id]);
+    setVotes(newVotes);
     socket.emit('run-vote', { roomId, userId: user.id });
-    setVotes(prev => new Set([...prev, user.id]));
-    // Auto-run if everyone voted (simplified — you'd know total user count)
-    if (votes.size + 1 >= users.length + 1) {
+    if (newVotes.size >= userCount) {
       socket.emit('run-execute', { roomId });
+      executeCode();
     }
   };
 
+  const handleSave = async () => {
+    try {
+      await axios.post(`http://localhost:5000/api/rooms/${roomId}/save`,
+        { code }, { headers: { Authorization: `Bearer ${token}` } }
+      );
+      alert('Code saved!');
+    } catch (e) { alert('Save failed'); }
+  };
+
+  const handleRaiseHand = () => {
+    socket.emit('raise-hand', { roomId, user });
+    setHandRaised(true);
+    setTimeout(() => setHandRaised(false), 3000);
+  };
+
+  const changeLanguage = (l) => {
+    setLanguage(l);
+    socket.emit('language-change', { roomId, language: l });
+  };
+
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#0d1117', color: '#fff' }}>
-      {/* Left Panel */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '8px 12px', background: '#161b22', display: 'flex', gap: 12, alignItems: 'center' }}>
-          <strong>Room: {roomId}</strong>
-          <select value={language} onChange={e => { setLanguage(e.target.value); socket.emit('language-change', { roomId, language: e.target.value }); }}
-            style={{ background: '#21262d', color: '#fff', border: '1px solid #30363d', borderRadius: 6, padding: '4px 8px' }}>
-            {LANGUAGES.map(l => <option key={l}>{l}</option>)}
-          </select>
-          <button onClick={handleVoteRun} disabled={isRunning}
-            style={{ background: '#238636', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 16px', cursor: 'pointer' }}>
-            ✅ Vote Run ({votes.size}/{users.length + 1})
-          </button>
-          <VoiceChannel roomId={roomId} userId={user?.id} />
+    <div style={s.page}>
+      {/* TOP BAR */}
+      <div style={s.topbar}>
+        <div style={s.left}>
+          <span style={s.logo}>⚡</span>
+          <span style={s.roomId}>Room: <strong>{roomId}</strong></span>
+          <span style={s.userBadge}>{user?.role} — {user?.username}</span>
         </div>
-
-        <CodeEditor roomId={roomId} language={language} code={code} setCode={setCode} userRole={user?.role} />
-
-        {/* Terminal */}
-        <div style={{ height: 160, background: '#0d1117', border: '1px solid #30363d', padding: 12, fontFamily: 'monospace', fontSize: 13, overflowY: 'auto' }}>
-          <div style={{ color: '#58a6ff' }}>$ output</div>
-          <pre style={{ color: output.includes('Error') ? '#f85149' : '#7ee787', margin: 0 }}>{output || 'Run code to see output here'}</pre>
+        <div style={s.center}>
+          <select style={s.select} value={language} onChange={e => changeLanguage(e.target.value)}>
+            {LANGUAGES.map(l => <option key={l} value={l}>{l.toUpperCase()}</option>)}
+          </select>
+          <button style={s.voteBtn} onClick={handleVoteRun} disabled={isRunning}>
+            ✅ Vote Run ({votes.size}/{userCount})
+          </button>
+          <button style={s.saveBtn} onClick={handleSave}>💾 Save</button>
+        </div>
+        <div style={s.right}>
+          <VoiceChannel roomId={roomId} userId={user?.id} />
+          <button
+            style={{ ...s.handBtn, background: handRaised ? '#9e6a03' : '#21262d' }}
+            onClick={handleRaiseHand}>
+            🖐 {handRaised ? 'Hand Raised!' : 'Raise Hand'}
+          </button>
+          <button style={s.leaveBtn} onClick={() => navigate('/dashboard')}>Leave</button>
         </div>
       </div>
 
-      {/* Right Panel — Chat */}
-      <Chat roomId={roomId} user={user} />
+      {/* MAIN AREA */}
+      <div style={s.main}>
+        {/* Editor + Terminal */}
+        <div style={s.editorPanel}>
+          <div style={s.editorArea}>
+            <CodeEditor roomId={roomId} language={language} code={code} setCode={setCode} />
+          </div>
+          <div style={s.terminalArea}>
+            <Terminal output={output} isRunning={isRunning} />
+          </div>
+        </div>
+
+        {/* Chat */}
+        <Chat roomId={roomId} user={user} />
+      </div>
     </div>
   );
 }
+
+const s = {
+  page:        { height: '100vh', display: 'flex', flexDirection: 'column', background: '#0d1117', overflow: 'hidden' },
+  topbar:      { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px', background: '#161b22', borderBottom: '1px solid #30363d', flexShrink: 0, flexWrap: 'wrap', gap: 8 },
+  left:        { display: 'flex', alignItems: 'center', gap: 12 },
+  logo:        { fontSize: 20 },
+  roomId:      { fontSize: 13, color: '#8b949e' },
+  userBadge:   { fontSize: 12, background: '#21262d', padding: '3px 10px', borderRadius: 12, color: '#58a6ff', border: '1px solid #30363d' },
+  center:      { display: 'flex', alignItems: 'center', gap: 8 },
+  select:      { padding: '6px 10px', background: '#21262d', border: '1px solid #30363d', borderRadius: 6, color: '#e6edf3', fontSize: 13 },
+  voteBtn:     { padding: '6px 14px', background: '#238636', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 600 },
+  saveBtn:     { padding: '6px 14px', background: '#21262d', border: '1px solid #30363d', borderRadius: 6, color: '#e6edf3', fontSize: 13 },
+  right:       { display: 'flex', alignItems: 'center', gap: 8 },
+  handBtn:     { padding: '6px 12px', border: '1px solid #30363d', borderRadius: 6, color: '#e6edf3', fontSize: 13 },
+  leaveBtn:    { padding: '6px 14px', background: '#da3633', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13 },
+  main:        { display: 'flex', flex: 1, overflow: 'hidden' },
+  editorPanel: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  editorArea:  { flex: 1, overflow: 'hidden' },
+  terminalArea:{ height: 180, flexShrink: 0 },
+};

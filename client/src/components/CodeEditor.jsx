@@ -1,29 +1,28 @@
 import Editor from '@monaco-editor/react';
-import { useSocket } from '../context/SocketContext';
 import { useEffect, useRef } from 'react';
+import { useSocket } from '../context/SocketContext';
 
-export default function CodeEditor({ roomId, language, code, setCode, userRole }) {
+export default function CodeEditor({ roomId, language, code, setCode }) {
   const socket = useSocket();
-  const isRemoteUpdate = useRef(false);
+  const isRemote = useRef(false);
 
   useEffect(() => {
-    socket.on('code-update', ({ code: remoteCode }) => {
-      isRemoteUpdate.current = true;
-      setCode(remoteCode);
+    socket.on('code-update', ({ code: c }) => {
+      isRemote.current = true;
+      setCode(c);
     });
-    socket.on('load-code', ({ code: savedCode, language }) => setCode(savedCode));
     return () => socket.off('code-update');
   }, [socket]);
 
   const handleChange = (value) => {
-    if (isRemoteUpdate.current) { isRemoteUpdate.current = false; return; }
+    if (isRemote.current) { isRemote.current = false; return; }
     setCode(value);
     socket.emit('code-change', { roomId, code: value });
   };
 
   return (
     <Editor
-      height="70vh"
+      height="100%"
       language={language}
       value={code}
       onChange={handleChange}
@@ -31,7 +30,9 @@ export default function CodeEditor({ roomId, language, code, setCode, userRole }
       options={{
         fontSize: 15,
         minimap: { enabled: false },
-        readOnly: userRole === 'student-view', // TA can restrict
+        scrollBeyondLastLine: false,
+        wordWrap: 'on',
+        automaticLayout: true,
       }}
     />
   );

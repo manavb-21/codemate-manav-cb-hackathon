@@ -1,27 +1,36 @@
 const router = require('express').Router();
 const axios  = require('axios');
 
-const LANGUAGE_IDS = { python: 71, javascript: 63, cpp: 54, java: 62 };
+const JDOODLE_LANGS = {
+  python:     { language: 'python3',     versionIndex: '3' },
+  javascript: { language: 'nodejs',      versionIndex: '3' },
+  cpp:        { language: 'cpp17',       versionIndex: '0' },
+  java:       { language: 'java',        versionIndex: '3' }
+};
 
 router.post('/', async (req, res) => {
   const { code, language } = req.body;
+  const lang = JDOODLE_LANGS[language] || JDOODLE_LANGS.python;
+  console.log('Executing:', language, 'via JDoodle');
   try {
-    const { data } = await axios.post(
-      `${process.env.JUDGE0_URL}/submissions?base64_encoded=false&wait=true`,
-      { source_code: code, language_id: LANGUAGE_IDS[language] || 71 },
-      { headers: {
-        'Content-Type': 'application/json',
-        'X-RapidAPI-Key': process.env.JUDGE0_KEY,
-        'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com'
-      }}
-    );
-    res.json({
-      stdout: data.stdout || '',
-      stderr: data.stderr || '',
-      compile_output: data.compile_output || '',
-      status: data.status?.description || 'Unknown'
+    const { data } = await axios.post('https://api.jdoodle.com/v1/execute', {
+      clientId:     process.env.JDOODLE_CLIENT_ID,
+      clientSecret: process.env.JDOODLE_CLIENT_SECRET,
+      script:       code,
+      language:     lang.language,
+      versionIndex: lang.versionIndex
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    console.log('JDoodle response:', data);
+    res.json({
+      stdout:         data.output || '',
+      stderr:         '',
+      compile_output: '',
+      status:         data.statusCode === 200 ? 'Accepted' : 'Error'
+    });
+  } catch (e) {
+    console.error('Execution error:', e.response?.data || e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 module.exports = router;
