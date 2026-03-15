@@ -13,7 +13,7 @@ export default function AIPanel({ code, language, output }) {
   setLoading(true);
   setResult('');
   try {
-    const { data } = await axios.post('http://localhost:5000/api/ai/summary', { code, language });
+    const { data } = await axios.post('${process.env.REACT_APP_API_URL}/api/ai/summary', { code, language });
     setResult(data.summary);
   } catch (e) { setResult('Error: ' + e.message); }
   setLoading(false);
@@ -23,7 +23,7 @@ const detectAI = async () => {
   setLoading(true);
   setResult('');
   try {
-    const { data } = await axios.post('http://localhost:5000/api/ai/detect-ai', { code, language });
+    const { data } = await axios.post('${process.env.REACT_APP_API_URL}/api/ai/detect-ai', { code, language });
     setResult(
       `🔍 AI Detection Result\n\n` +
       `Verdict: ${data.verdict}\n` +
@@ -38,7 +38,7 @@ const debugCode = async () => {
   setLoading(true);
   setResult('');
   try {
-    const { data } = await axios.post('http://localhost:5000/api/ai/debug', { code, error: output, language });
+    const { data } = await axios.post('${process.env.REACT_APP_API_URL}/api/ai/debug', { code, error: output, language });
     setResult(data.debug);
   } catch (e) { setResult('Error: ' + e.message); }
   setLoading(false);
@@ -49,7 +49,7 @@ const evaluateCode = async () => {
   setResult('');
   const user = JSON.parse(localStorage.getItem('user'));
   try {
-    const { data } = await axios.post('http://localhost:5000/api/ai/evaluate', { code, language, studentName: user?.username });
+    const { data } = await axios.post('${process.env.REACT_APP_API_URL}/api/ai/evaluate', { code, language, studentName: user?.username });
     setResult(data.evaluation);
   } catch (e) { setResult('Error: ' + e.message); }
   setLoading(false);

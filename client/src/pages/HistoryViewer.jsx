@@ -14,7 +14,7 @@ export default function HistoryViewer() {
     const fetchHistory = async () => {
       try {
         const { data } = await axios.get(
-          `http://localhost:5000/api/rooms/${roomId}`,
+          `${process.env.REACT_APP_API_URL}/api/rooms/${roomId}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         setHistory(data.history || []);

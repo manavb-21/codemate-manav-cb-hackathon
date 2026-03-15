@@ -5,9 +5,10 @@ export default function VoiceChannel({ roomId, userId }) {
   const socket = useSocket();
   const [isMuted, setIsMuted] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
-  const [peers, setPeers] = useState([]);
+  const [speaking, setSpeaking] = useState(false);
   const streamRef = useRef(null);
   const peerRef = useRef(null);
+  const analyserRef = useRef(null);
 
   useEffect(() => {
     let peer;
@@ -15,24 +16,23 @@ export default function VoiceChannel({ roomId, userId }) {
       peer = new Peer(userId + '_' + roomId);
       peerRef.current = peer;
 
-      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-        streamRef.current = stream;
-        setIsConnected(true);
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+          streamRef.current = stream;
+          setIsConnected(true);
+          detectSpeaking(stream);
 
-        peer.on('call', call => {
-          call.answer(stream);
-          call.on('stream', remoteStream => playAudio(remoteStream));
-          setPeers(prev => [...prev, call.peer]);
-        });
-
-        socket.on('user-joined', ({ user }) => {
-          const call = peer.call(user.id + '_' + roomId, stream);
-          if (call) {
+          peer.on('call', call => {
+            call.answer(stream);
             call.on('stream', remoteStream => playAudio(remoteStream));
-            setPeers(prev => [...prev, user.username]);
-          }
-        });
-      }).catch(() => setIsConnected(false));
+          });
+
+          socket.on('user-joined', ({ user }) => {
+            const call = peer.call(user.id + '_' + roomId, stream);
+            if (call) call.on('stream', remoteStream => playAudio(remoteStream));
+          });
+        })
+        .catch(() => setIsConnected(false));
     });
 
     return () => {
@@ -40,6 +40,23 @@ export default function VoiceChannel({ roomId, userId }) {
       peer?.destroy();
     };
   }, []);
+
+  const detectSpeaking = (stream) => {
+    const ctx = new AudioContext();
+    const analyser = ctx.createAnalyser();
+    const src = ctx.createMediaStreamSource(stream);
+    src.connect(analyser);
+    analyser.fftSize = 512;
+    analyserRef.current = analyser;
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const check = () => {
+      analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a, b) => a + b) / data.length;
+      setSpeaking(avg > 10);
+      requestAnimationFrame(check);
+    };
+    check();
+  };
 
   const playAudio = (stream) => {
     const audio = document.createElement('audio');
@@ -56,24 +73,34 @@ export default function VoiceChannel({ roomId, userId }) {
   };
 
   return (
-    <div style={s.voice}>
-      <div style={s.status}>
-        <span style={{ ...s.dot, background: isConnected ? '#238636' : '#8b949e' }} />
-        <span style={s.label}>{isConnected ? `Voice Live` : 'Connecting...'}</span>
-        {peers.length > 0 && <span style={s.count}>{peers.length} connected</span>}
+    <div style={{
+      ...s.voice,
+      border: speaking && !isMuted ? '1px solid #238636' : '1px solid #30363d',
+      transition: 'border 0.2s'
+    }}>
+      <div style={s.left}>
+        <div style={{
+          ...s.dot,
+          background: !isConnected ? '#8b949e' : isMuted ? '#da3633' : speaking ? '#238636' : '#3fb950'
+        }}/>
+        <span style={s.label}>
+          {!isConnected ? 'No mic' : isMuted ? 'Muted' : speaking ? 'Speaking...' : 'Voice Live'}
+        </span>
       </div>
-      <button style={{ ...s.muteBtn, background: isMuted ? '#da3633' : '#21262d' }} onClick={toggleMute}>
-        {isMuted ? '🔇' : '🎙'}
+      <button
+        title={isMuted ? 'Unmute' : 'Mute'}
+        style={{ ...s.muteBtn, background: isMuted ? '#da3633' : '#21262d' }}
+        onClick={toggleMute}>
+        {isMuted ? '🔇' : '🎙️'}
       </button>
     </div>
   );
 }
 
 const s = {
-  voice:   { display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', background: '#21262d', borderRadius: 8, border: '1px solid #30363d' },
-  status:  { display: 'flex', alignItems: 'center', gap: 6 },
-  dot:     { width: 8, height: 8, borderRadius: '50%', display: 'inline-block' },
-  label:   { fontSize: 12, color: '#e6edf3' },
-  count:   { fontSize: 11, color: '#8b949e' },
-  muteBtn: { border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 16, cursor: 'pointer' }
+  voice:   { display: 'flex', alignItems: 'center', gap: 10, padding: '5px 10px', background: '#21262d', borderRadius: 8 },
+  left:    { display: 'flex', alignItems: 'center', gap: 6 },
+  dot:     { width: 8, height: 8, borderRadius: '50%', flexShrink: 0 },
+  label:   { fontSize: 12, color: '#e6edf3', minWidth: 80 },
+  muteBtn: { border: '1px solid #30363d', borderRadius: 6, padding: '4px 8px', fontSize: 16, cursor: 'pointer', lineHeight: 1 }
 };

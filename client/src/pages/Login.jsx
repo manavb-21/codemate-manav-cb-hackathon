@@ -12,7 +12,7 @@ export default function Login() {
     e.preventDefault();
     setError('');
     try {
-      const url = `http://localhost:5000/api/auth/${isRegister ? 'register' : 'login'}`;
+      const url = `${process.env.REACT_APP_API_URL}/api/auth/${isRegister ? 'register' : 'login'}`;
       const { data } = await axios.post(url, form);
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
