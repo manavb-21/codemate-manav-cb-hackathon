@@ -18,7 +18,8 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => console.error('MongoDB error:', err));
 
-app.use('/api/auth',    require('./routes/auth'));
+app.use('/api/ai', require('./routes/ai'));
+app.use('/api/auth', require('./routes/auth'));
 app.use('/api/rooms',   require('./routes/rooms'));
 app.use('/api/execute', require('./routes/execute'));
 

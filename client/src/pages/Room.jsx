@@ -6,6 +6,7 @@ import Terminal from '../components/Terminal';
 import Chat from '../components/Chat';
 import VoiceChannel from '../components/VoiceChannel';
 import axios from 'axios';
+import AIPanel from '../components/AIPanel';
 
 const LANGUAGES = ['python', 'javascript', 'cpp', 'java'];
 
@@ -129,6 +130,7 @@ export default function Room() {
 
         {/* Chat */}
         <Chat roomId={roomId} user={user} />
+        <AIPanel code={code} language={language} output={output} />
       </div>
     </div>
   );
