@@ -11,7 +11,7 @@ export default function Dashboard() {
 
   const createRoom = async () => {
     try {
-      const { data } = await axios.post('${process.env.REACT_APP_API_URL}/api/rooms/create',
+      const { data } = await axios.post(`${process.env.REACT_APP_API_URL}/api/rooms/create`,
         { name: roomName || 'My Room' },
         { headers: { Authorization: `Bearer ${token}` } }
       );

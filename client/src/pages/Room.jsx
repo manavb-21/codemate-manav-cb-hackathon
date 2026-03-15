@@ -55,7 +55,7 @@ export default function Room() {
     setIsRunning(true);
     setOutput('Running...');
     try {
-      const { data } = await axios.post('${process.env.REACT_APP_API_URL}/api/execute', { code, language });
+      const { data } = await axios.post(`${process.env.REACT_APP_API_URL}/api/execute`, { code, language });
       const result = data.stdout || data.stderr || data.compile_output || 'No output';
       setOutput(`[${data.status}]\n${result}`);
     } catch (e) {
