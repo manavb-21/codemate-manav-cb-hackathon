@@ -1,0 +1,68 @@
+{
+  "name": "codemate",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+  "dev": "concurrently \"npm run server\" \"npm run client\"",
+  "server": "cd server && nodemon index.js",
+  "client": "cd client && npm start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
+
+```
+
+---
+
+## 📁 Folder Structure
+```
+codemate/
+├── server/
+│   ├── index.js              ← Express + Socket.IO entry
+│   ├── .env
+│   ├── models/
+│   │   ├── User.js
+│   │   └── Room.js
+│   ├── routes/
+│   │   ├── auth.js           ← /api/auth/register, /login
+│   │   ├── rooms.js          ← /api/rooms/create, /join/:id
+│   │   └── execute.js        ← /api/execute
+│   ├── middleware/
+│   │   └── auth.js           ← JWT verify middleware
+│   └── socket/
+│       └── roomHandler.js    ← All Socket.IO events
+│
+└── client/src/
+    ├── App.js
+    ├── pages/
+    │   ├── Login.jsx
+    │   ├── Dashboard.jsx     ← Create/join room
+    │   └── Room.jsx          ← Main editor page
+    ├── components/
+    │   ├── CodeEditor.jsx    ← Monaco wrapper
+    │   ├── Terminal.jsx      ← Output/error display
+    │   ├── Chat.jsx          ← Real-time text chat
+    │   ├── VoiceChannel.jsx  ← PeerJS voice
+    │   └── Toolbar.jsx       ← Lang selector, run btn, roles
+    └── context/
+        └── SocketContext.js
+```
+
+---
+
+## 🔧 Phase 2 — Backend Core (30 min)
+
+**`server/.env`**
+```
+MONGO_URI=mongodb+srv://...
+JWT_SECRET=supersecret123
+JUDGE0_URL=https://judge0-ce.p.rapidapi.com
+JUDGE0_KEY=your_rapidapi_key
+PORT=5000
