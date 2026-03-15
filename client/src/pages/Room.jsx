@@ -7,6 +7,7 @@ import Chat from '../components/Chat';
 import VoiceChannel from '../components/VoiceChannel';
 import axios from 'axios';
 import AIPanel from '../components/AIPanel';
+import ScreenShare from '../components/ScreenShare';
 
 const LANGUAGES = ['python', 'javascript', 'cpp', 'java'];
 
@@ -26,22 +27,29 @@ export default function Room() {
   const [handRaised, setHandRaised] = useState(false);
 
   useEffect(() => {
-    if (!user) { navigate('/login'); return; }
+  if (!user) { navigate('/login'); return; }
 
-    socket.emit('join-room', { roomId, user });
+  socket.emit('join-room', { roomId, user });
 
-    socket.on('load-room', ({ code: c, language: l }) => {
-      setCode(c);
-      setLanguage(l);
-    });
-    socket.on('language-update', ({ language: l }) => setLanguage(l));
-    socket.on('user-joined', () => setUserCount(p => p + 1));
-    socket.on('user-left',   () => setUserCount(p => Math.max(1, p - 1)));
-    socket.on('run-vote-update', ({ userId }) => setVotes(prev => new Set([...prev, userId])));
-    socket.on('execution-started', () => executeCode());
+  socket.on('load-room', ({ code: c, language: l }) => {
+    setCode(c);
+    setLanguage(l);
+  });
+  socket.on('language-update', ({ language: l }) => setLanguage(l));
+  socket.on('user-joined', () => setUserCount(p => p + 1));
+  socket.on('user-left',   () => setUserCount(p => Math.max(1, p - 1)));
+  socket.on('run-vote-update', ({ userId }) => setVotes(prev => new Set([...prev, userId])));
+  socket.on('execution-started', () => executeCode());
 
-    return () => socket.removeAllListeners();
-  }, [roomId]);
+  return () => {
+    socket.off('load-room');
+    socket.off('language-update');
+    socket.off('user-joined');
+    socket.off('user-left');
+    socket.off('run-vote-update');
+    socket.off('execution-started');
+  };
+}, []); // ← empty array, runs ONCE only
 
   const executeCode = async () => {
     setIsRunning(true);
@@ -58,14 +66,27 @@ export default function Room() {
   };
 
   const handleVoteRun = () => {
+  // Students can only vote, NOT directly run
+  if (user?.role === 'student') {
     const newVotes = new Set([...votes, user.id]);
     setVotes(newVotes);
     socket.emit('run-vote', { roomId, userId: user.id });
-    if (newVotes.size >= userCount) {
-      socket.emit('run-execute', { roomId });
-      executeCode();
-    }
-  };
+    alert('✅ Your vote to run has been cast! Waiting for all collaborators...');
+    return;
+  }
+
+  // TA/Teacher can run immediately OR trigger consensus
+  const newVotes = new Set([...votes, user.id]);
+  setVotes(newVotes);
+  socket.emit('run-vote', { roomId, userId: user.id });
+
+  if (newVotes.size >= userCount) {
+    socket.emit('run-execute', { roomId });
+    executeCode();
+  } else {
+    alert(`✅ Vote cast! ${newVotes.size}/${userCount} votes. Waiting for others...`);
+  }
+};
 
   const handleSave = async () => {
     try {
@@ -100,13 +121,19 @@ export default function Room() {
           <select style={s.select} value={language} onChange={e => changeLanguage(e.target.value)}>
             {LANGUAGES.map(l => <option key={l} value={l}>{l.toUpperCase()}</option>)}
           </select>
-          <button style={s.voteBtn} onClick={handleVoteRun} disabled={isRunning}>
-            ✅ Vote Run ({votes.size}/{userCount})
-          </button>
-          <button style={s.saveBtn} onClick={handleSave}>💾 Save</button>
+            <button style={s.voteBtn} onClick={handleVoteRun} disabled={isRunning}>
+            {user?.role === 'student'
+                ? `🖐 Vote Run (${votes.size}/${userCount})`
+                : `▶️ Run (${votes.size}/${userCount})`}
+            </button>
+            <button style={s.saveBtn} onClick={handleSave}>💾 Save</button>
+            <button style={s.saveBtn} onClick={() => navigate(`/history/${roomId}`)}>
+            📜 History
+            </button>
         </div>
         <div style={s.right}>
-          <VoiceChannel roomId={roomId} userId={user?.id} />
+            <VoiceChannel roomId={roomId} userId={user?.id} />
+            <ScreenShare />
           <button
             style={{ ...s.handBtn, background: handRaised ? '#9e6a03' : '#21262d' }}
             onClick={handleRaiseHand}>
@@ -121,7 +148,13 @@ export default function Room() {
         {/* Editor + Terminal */}
         <div style={s.editorPanel}>
           <div style={s.editorArea}>
-            <CodeEditor roomId={roomId} language={language} code={code} setCode={setCode} />
+            <CodeEditor
+                roomId={roomId}
+                language={language}
+                code={code}
+                setCode={setCode}
+                userRole={user?.role}
+            />
           </div>
           <div style={s.terminalArea}>
             <Terminal output={output} isRunning={isRunning} />

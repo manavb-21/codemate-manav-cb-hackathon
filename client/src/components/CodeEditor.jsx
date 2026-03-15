@@ -2,7 +2,7 @@ import Editor from '@monaco-editor/react';
 import { useEffect, useRef } from 'react';
 import { useSocket } from '../context/SocketContext';
 
-export default function CodeEditor({ roomId, language, code, setCode }) {
+export default function CodeEditor({ roomId, language, code, setCode, userRole }) {
   const socket = useSocket();
   const isRemote = useRef(false);
 
@@ -33,6 +33,7 @@ export default function CodeEditor({ roomId, language, code, setCode }) {
         scrollBeyondLastLine: false,
         wordWrap: 'on',
         automaticLayout: true,
+        readOnly: userRole === 'student',
       }}
     />
   );
